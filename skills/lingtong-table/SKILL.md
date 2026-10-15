@@ -1,7 +1,7 @@
 ---
 name: lingtong-table
-version: 2.10.0
-description: "绫通表格管理：表格 CRUD、数据查询、记录创建、单条更新、批量更新、记录计数、删除（带确认）、Schema 管理。当用户需要操作绫通表格、查询数据、创建记录、更新记录、统计记录数、删除记录、理解表格结构时触发。关键词：table、表格、table data、query、create record、update、count、batch-update、delete、schema。"
+version: 2.12.0
+description: "绫通表格管理：表格 CRUD、数据查询、记录创建、单条更新、批量更新、记录计数、删除（带确认）、Schema 与公式字段管理。当用户需要操作绫通表格、查询数据、创建记录、更新记录、统计记录数、删除记录、理解表格结构、添加公式或计算列时触发。关键词：table、表格、table data、query、create record、update、count、batch-update、delete、schema、公式、function。"
 ---
 
 # lingtong-table 技能
@@ -9,6 +9,8 @@ description: "绫通表格管理：表格 CRUD、数据查询、记录创建、�
 ## 概述
 
 本技能指导你如何通过 `lingtong-cli` 管理绫通平台的表格数据。
+
+**公式/计算列入口**：需要金额、条件判断、日期差、文本或数组公式时，继续阅读 [lingtong-table-formula](../lingtong-table-formula/SKILL.md)，其中包含经过源码核对的字段契约、完整 Schema 更新流程及 ES/Painless 限制。
 
 ## 前置条件
 
@@ -482,6 +484,8 @@ lingtong-cli table schema query --basic-data-id 123 --business-type 1
 
 更新表格 Schema 支持两种模式：
 
+**两种模式都完整替换 `columnsSchema`**。先读取并保留原有完整字段数组，只在原数组上合并改动。下方单列 JSON 仅展示参数结构，不能直接用于已有多列表格；自动取版本不等于自动合并列，涉及并发修改时优先携带读取时的 `version`。
+
 #### 模式 1：简单模式（推荐）
 
 只需提供字段定义数组，版本号自动获取：
@@ -550,6 +554,8 @@ lingtong-cli table schema update --schema-id 2546 \
 ### 字段属性详解
 
 每个字段定义包含以下属性（来源：后端 `ColumnsSchema.java`）：
+
+下表的“CLI 默认值”由 `table create --columns-schema` 补齐；`table schema update` 不补齐新列默认属性，新增公式列等字段时显式设置 `show`、`primaryKey` 和显示配置。
 
 | 属性 | 类型 | 必填 | CLI 默认值 | 说明 |
 |------|------|------|-----------|------|
@@ -645,17 +651,26 @@ lingtong-cli table schema update --schema-id 2546 \
 ```
 
 #### 7. 公式字段 (function)
-> 需要开启高性能模式 `--open-high-mode 1`
+> 面向 ES 查询的公式先开启高性能模式 `--open-high-mode 1`，并确认租户 ES 查询与同步已启用。新表先建立普通源字段及映射，再通过完整 Schema 更新追加公式列。
 
 ```json
 {
+  "id": 4,
   "title": "总金额",
   "key": "totalAmount",
   "type": "function",
-  "function": "[单价]*[数量]",
-  "functionFieldType": "number"
+  "function": "ROUND([单价]*[数量],2)",
+  "functionFieldType": "number",
+  "numberFormat": "1.00",
+  "show": true,
+  "primaryKey": false,
+  "dataDisabled": true
 }
 ```
+
+公式按字段 **title** 引用，记录 `data` 才使用字段 ID。上例是新增列片段，更新时必须保留原有完整 `columnsSchema` 和读取时的 `version`；不能只提交公式列。`--basic-data-id` 自动取版本不会合并列。字段属性是小写 `type: "function"` 与 `function`，不是 `FORMULA`/`formula`。
+
+函数目录、日期单位、空值和公式验证方式见 [公式与函数](../lingtong-table-formula/references/functions.md)。当前没有独立 `table formula` 命令，使用现有 `table schema query/update` 配置并查询样本核验。
 
 #### 8. 系统字段 - 创建日期 (createDate)
 ```json
@@ -747,10 +762,11 @@ lingtong-cli table create --app-id 165 --name "订单表" --source 1 --type 1 --
 3. **创建记录时必须指定 `--schema-id`**：从 `table data query` 响应中获取
 4. **版本校验**：不指定 `--version` 时跳过校验（推荐），指定时需与 Schema 的 version 匹配
 5. **字段 ID 是数字字符串**：`--data` 中的 key 使用字符串格式的数字（如 `"0"`, `"1"`）
-6. **字段默认可见**：CLI 会自动设置 `show: true`，无需手动指定
+6. **创建时字段默认可见**：`table create` 自动设置 `show: true`；`table schema update` 新增列时需显式提供
 7. **公式字段需高性能模式**：使用 `type: "function"` 时必须 `--open-high-mode 1`
 8. **系统字段只读**：`createDate`/`updateDate` 设置 `dataDisabled: true`
 
 ## 相关技能
 
+- [lingtong-table-formula](../lingtong-table-formula/SKILL.md) - 公式字段、常用函数、ES Runtime Field/Painless
 - [lingtong-pivot-table](../lingtong-pivot-table/SKILL.md) - 绫通表格数据透视表

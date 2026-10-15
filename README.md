@@ -17,11 +17,11 @@
 | 连接器工厂 | 自定义连接器定义、HTTP 接口、脚本的查询、保存、运行、删除 |
 | 场景 | 场景列表、详情、草稿创建、更新、复制、开关、发布、版本、触发条件、字段映射调试 |
 | 工作流 | 创建、更新、删除、验证、测试、发布、回滚、执行、日志、Open API、模板、文档、依赖分析 |
-| 表格 | 表格 CRUD、Schema 管理、数据查询/创建/更新/批量更新/统计/删除、视图、分组、统计指标 |
+| 表格 | 表格 CRUD、Schema 与公式字段管理、数据查询/创建/更新/批量更新/统计/删除、视图、分组、统计指标 |
 | 透视表 | 透视表视图、配置读取/保存、维度/度量聚合查询 |
 | 模型元数据 | 接口模型、领域模型、动态模型视图 |
 | API 自省 | OpenAPI Schema 浏览、模块搜索、自动生成 `service` 命令、原始 `api` 调用 |
-| Agent Skills | 11 个内置 Skills，可安装到 Claude Code、OpenCode、Qoder、Cursor、Trae、Codex |
+| Agent Skills | 12 个内置 Skills，可安装到 Claude Code、OpenCode、Qoder、Cursor、Trae、Codex |
 
 ## 为什么选 lingtong-cli？
 
@@ -363,7 +363,7 @@ Token 读取顺序以代码为准：`LINGTONG_TOKEN` 可覆盖运行时 Token，
 
 ## Agent Skills
 
-当前二进制内置 11 个有效 Skills。可通过 `lingtong-cli skills list` 查看实时清单。
+本版本构建后内置 12 个有效 Skills。可通过 `lingtong-cli skills list` 查看当前二进制的实时清单。
 
 | Skill | 说明 |
 |-------|------|
@@ -373,13 +373,16 @@ Token 读取顺序以代码为准：`LINGTONG_TOKEN` 可覆盖运行时 Token，
 | `lingtong-factory` | 连接器工厂、HTTP 接口、脚本管理 |
 | `lingtong-scene` | 场景查询、草稿创建、生命周期操作、触发条件、字段映射调试 |
 | `lingtong-workflow` | 工作流 DSL、节点编排、验证、测试、发布、执行、Open API |
-| `lingtong-table` | 表格 CRUD、Schema、记录 CRUD、视图、分组、统计 |
+| `lingtong-table` | 表格 CRUD、Schema、公式入口、记录 CRUD、视图、分组、统计 |
+| `lingtong-table-formula` | 公式字段、函数参考、完整 Schema 更新、ES Runtime Field/Painless 排查 |
 | `lingtong-pivot-table` | 透视表查询、配置、维度/度量聚合 |
 | `lingtong-model` | 接口模型、领域模型、动态模型视图 |
 | `lingtong-service` | OpenAPI 自动命令层，覆盖长尾 API |
 | `lingtong-script` | ES5.1/Nashorn 脚本、InfInvoker、AppInvoker、context API |
 
 `skills/lingtong-basicdata/` 是历史遗留目录，不再作为有效 Skill 内置。基础资料操作已合并到 `lingtong-table`。
+
+公式能力通过现有 `table schema query/update` 配置。详细用法见 [公式技能](skills/lingtong-table-formula/SKILL.md)，源码核查记录见 [公式技能遗漏核查](doc/table-formula-skill-audit.md)。更新技能需先更新/重新构建 CLI，再执行 `skills install`；旧二进制不会动态读取源码目录。
 
 ## 安装 Skills 到 AI 编辑器
 

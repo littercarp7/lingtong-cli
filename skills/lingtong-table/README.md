@@ -1,12 +1,13 @@
 # lingtong-table 技能
 
-`lingtong-table` 是表格和基础资料的主入口，覆盖表格 CRUD、Schema、记录 CRUD、批量操作、统计、视图、分组和基础透视表入口。
+`lingtong-table` 是表格和基础资料的主入口，覆盖表格 CRUD、Schema、公式字段、记录 CRUD、批量操作、统计、视图、分组和基础透视表入口。
 
 ## 何时使用
 
 - 创建、查询或更新表格
 - 查询、创建、更新、批量更新、统计、删除表格记录
 - 查询或更新表格 Schema
+- 添加金额、日期差、条件判断等公式/计算列
 - 管理表格视图、分组和统计指标
 - 创建透视表视图或进入透视表配置流程
 - 从旧 `basicdata` 口径迁移到 `table data`
@@ -37,6 +38,8 @@ lingtong-cli table data create --basic-data-id 1568 --schema-id 2367 --data '{"1
 | 更新 Schema | `lingtong-cli table schema update --schema-id <id> --basic-data-id <id> --columns-schema '<json-array>'` |
 
 ## 数据操作
+
+公式字段的创建、更新与核验见 [lingtong-table-formula](../lingtong-table-formula/SKILL.md)。使用 `type: "function"`、`function: "ROUND([单价]*[数量],2)"`、`functionFieldType: "number"`，按字段标题引用；通过完整 Schema 更新配置，不在记录数据中写计算结果。ES 查询还需确认高性能模式、租户查询开关和数据同步。
 
 | 目标 | 命令 |
 |------|------|
@@ -92,6 +95,7 @@ lingtong-cli table pivot query --table-id 1568 --view-id 621
 ## 相关文档
 
 - [SKILL.md](SKILL.md) - 完整命令和模式说明
+- [lingtong-table-formula](../lingtong-table-formula/SKILL.md) - 公式字段与函数、Schema 配置及 ES/Painless 排查
 - `lingtong-pivot-table` - 透视表配置
 - `lingtong-script` - 表格脚本和 InfInvoker
 - `lingtong-service` - 长尾 basicdata API
