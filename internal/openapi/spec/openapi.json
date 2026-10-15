@@ -16257,6 +16257,56 @@
         "x-order": "7"
       }
     },
+    "/basicdata/record/batchSave": {
+      "post": {
+        "tags": [
+          "绫通表格数据接口"
+        ],
+        "summary": "批量新增表格数据",
+        "description": "批量新增多条表格数据记录，默认开启主键更新校验并全字段更新",
+        "operationId": "batchSaveUsingPOST_1",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "*/*"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "dtoList",
+            "description": "表格数据列表",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "originalRef": "BasicDataFormRecordDto",
+                "$ref": "#/definitions/BasicDataFormRecordDto"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "originalRef": "Result«List«BasicDataFormRecordDto»»",
+              "$ref": "#/definitions/Result«List«BasicDataFormRecordDto»»"
+            }
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "403": {
+            "description": "无权限"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        },
+        "x-order": "6"
+      }
+    },
     "/basicdata/record/batchUpdate": {
       "post": {
         "tags": [

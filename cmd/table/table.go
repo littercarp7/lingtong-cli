@@ -6,6 +6,7 @@ package table
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -401,6 +402,7 @@ func newCmdTableData(f *cmdutil.Factory) *cobra.Command {
 
 	cmd.AddCommand(newCmdTableDataQuery(f))
 	cmd.AddCommand(newCmdTableDataCreate(f))
+	cmd.AddCommand(newCmdTableDataBatchCreate(f))
 	cmd.AddCommand(newCmdTableDataUpdate(f))
 	cmd.AddCommand(newCmdTableDataCount(f))
 	cmd.AddCommand(newCmdTableDataBatchUpdate(f))
@@ -632,15 +634,17 @@ func newCmdTableDataBatchUpdate(f *cmdutil.Factory) *cobra.Command {
 	var basicDataId int
 	var schemaId int
 	var version int
-	var records string
+	var records, recordsFile string
 	cmd := &cobra.Command{
 		Use:   "batch-update",
 		Short: "Batch update table records",
-		Long: `Batch update multiple records in a table.
+		Long: `Batch update multiple records in a table. The backend replaces each
+record's complete data object, so omitted fields may be cleared.
 
-The --records flag accepts a JSON array of update objects. Each object must contain:
+Provide exactly one of --records or --records-file. Each object must contain:
 - id: record ID (required)
-- data: field data as JSON map (required)
+- data: complete field data including the business primary key (required)
+- updated: previous updated timestamp from query output (recommended)
 
 Optional fields per record:
 - basicDataId: table ID (auto-filled from --basic-data-id if not set)
@@ -650,11 +654,12 @@ Optional fields per record:
 EXAMPLES:
     # Batch update two records
     lingtong-cli table data batch-update --basic-data-id 1633 --schema-id 2546 \
-      --records '[{"id":33832272,"data":{"1":"value1","2":10}},{"id":33832273,"data":{"1":"value2","2":20}}]'
+      --records '[{"id":33832272,"updated":1773108469514,"data":{"1":"PK-1","2":"value1","3":10}},{"id":33832273,"updated":1773108469514,"data":{"1":"PK-2","2":"value2","3":20}}]'
 
-    # Batch update with version
+    # Large payloads: query with --omit-null=false, modify the complete data maps,
+    # then write them from a JSON file
     lingtong-cli table data batch-update --basic-data-id 1633 --schema-id 2546 --version 1 \
-      --records '[{"id":33832272,"data":{"1":"new"}}]'`,
+      --records-file ./updates.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if basicDataId == 0 {
 				return fmt.Errorf("--basic-data-id is required")
@@ -662,15 +667,23 @@ EXAMPLES:
 			if schemaId == 0 {
 				return fmt.Errorf("--schema-id is required")
 			}
-			if records == "" {
-				return fmt.Errorf("--records is required")
+			if (records == "") == (recordsFile == "") {
+				return fmt.Errorf("provide only one of --records or --records-file")
 			}
 			if err := cmdutil.RequireHostConfigured(f.Config.Host); err != nil {
 				return err
 			}
 
+			source := []byte(records)
+			if recordsFile != "" {
+				var err error
+				source, err = os.ReadFile(recordsFile)
+				if err != nil {
+					return fmt.Errorf("read --records-file: %w", err)
+				}
+			}
 			var recordList []map[string]interface{}
-			if err := json.Unmarshal([]byte(records), &recordList); err != nil {
+			if err := json.Unmarshal(source, &recordList); err != nil {
 				return fmt.Errorf("invalid --records JSON: %w", err)
 			}
 
@@ -712,9 +725,9 @@ EXAMPLES:
 
 			format := output.Format(cmd.Flag("format").Value.String())
 			w := f.NewWriter(format)
-			var result interface{}
-			if err := json.Unmarshal(resp, &result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+			result, err := parseTableMutationResponse(resp, "batch update", len(recordList))
+			if err != nil {
+				return err
 			}
 			return w.Write(result)
 		},
@@ -723,11 +736,36 @@ EXAMPLES:
 	cmd.Flags().IntVar(&basicDataId, "basic-data-id", 0, "Table ID (required)")
 	cmd.Flags().IntVar(&schemaId, "schema-id", 0, "Schema ID (required)")
 	cmd.Flags().IntVar(&version, "version", 0, "Schema version (optional, applied to all records)")
-	cmd.Flags().StringVar(&records, "records", "", "JSON array of update records (required)")
+	cmd.Flags().StringVar(&records, "records", "", "JSON array of complete update records")
+	cmd.Flags().StringVar(&recordsFile, "records-file", "", "Path to a JSON array of complete update records")
 	_ = cmd.MarkFlagRequired("basic-data-id")
 	_ = cmd.MarkFlagRequired("schema-id")
-	_ = cmd.MarkFlagRequired("records")
 	return cmd
+}
+
+func parseTableMutationResponse(resp []byte, operation string, expectedCount int) (interface{}, error) {
+	var result interface{}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	if envelope, ok := result.(map[string]interface{}); ok {
+		if success, exists := envelope["success"].(bool); exists && !success {
+			message, _ := envelope["msg"].(string)
+			if strings.TrimSpace(message) == "" {
+				message = "success is false"
+			}
+			return nil, fmt.Errorf("%s failed: %s", operation, message)
+		}
+		if records, exists := envelope["result"].([]interface{}); exists && len(records) != expectedCount {
+			return nil, fmt.Errorf(
+				"%s returned %d records, expected %d",
+				operation,
+				len(records),
+				expectedCount,
+			)
+		}
+	}
+	return result, nil
 }
 
 // ==================== table data update ====================
@@ -742,7 +780,8 @@ func newCmdTableDataUpdate(f *cmdutil.Factory) *cobra.Command {
 		Long: `Update one existing record by ID.
 
 Wraps POST /basicdata/record/update. --data is a JSON object keyed by field id
-containing only the fields to change.
+containing the complete record data, including the business primary key. Omitted
+fields may be cleared. Query with --omit-null=false before read-modify-write.
 
 EXAMPLES:
     lingtong-cli table data update --basic-data-id 123 --schema-id 1 --id 33832272 --data '{"1":"newValue"}'
@@ -799,7 +838,7 @@ EXAMPLES:
 	cmd.Flags().IntVar(&schemaId, "schema-id", 0, "Schema ID (required)")
 	cmd.Flags().IntVar(&id, "id", 0, "Record ID to update (required)")
 	cmd.Flags().IntVar(&version, "version", 0, "Data version number (optional)")
-	cmd.Flags().StringVar(&data, "data", "", "Fields to update (JSON object, required)")
+	cmd.Flags().StringVar(&data, "data", "", "Complete record data (JSON object, required)")
 	_ = cmd.MarkFlagRequired("basic-data-id")
 	_ = cmd.MarkFlagRequired("schema-id")
 	_ = cmd.MarkFlagRequired("id")

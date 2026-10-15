@@ -1,7 +1,7 @@
 ---
 name: lingtong-table
 version: 2.12.0
-description: "绫通表格管理：表格 CRUD、数据查询、记录创建、单条更新、批量更新、记录计数、删除（带确认）、Schema 与公式字段管理。当用户需要操作绫通表格、查询数据、创建记录、更新记录、统计记录数、删除记录、理解表格结构、添加公式或计算列时触发。关键词：table、表格、table data、query、create record、update、count、batch-update、delete、schema、公式、function。"
+description: "绫通表格管理：表格 CRUD、数据查询、记录创建、批量创建、单条更新、批量更新、记录计数、删除（带确认）、Schema 与公式字段管理。当用户需要操作绫通表格、查询数据、创建记录、批量导入、更新记录、统计记录数、删除记录、理解表格结构、添加公式或计算列时触发。关键词：table、表格、table data、query、create record、batch-create、update、count、batch-update、delete、schema、公式、function。"
 ---
 
 # lingtong-table 技能
@@ -132,7 +132,7 @@ lingtong-cli table data query --basic-data-id <id> \
   [--start-update-time <ms>] [--end-update-time <ms>] \
   [--primary-key <json-array>] \
   [--page <n>] [--page-size <n>] \
-  [--order-by <field>] [--order-asc]
+  [--order-by <field>] [--order-asc] [--omit-null=false]
 ```
 
 **参数说明**：
@@ -150,6 +150,7 @@ lingtong-cli table data query --basic-data-id <id> \
 | `--page-size` | 每页条数（默认 20） |
 | `--order-by` | 排序字段（如 `created`、`updated`） |
 | `--order-asc` | 升序排列（默认降序） |
+| `--omit-null=false` | 保留 null 字段；全字段更新前必须使用，避免读改写时丢字段 |
 | `--view-group-data` | 分组明细查询 JSON（从 `table view group-data` 响应获取） |
 
 **过滤模式说明**：
@@ -349,47 +350,92 @@ lingtong-cli table data update --basic-data-id <id> --schema-id <id> --id <recor
 - `--basic-data-id`: 表格 ID（必填）
 - `--schema-id`: Schema ID（必填）
 - `--id`: 记录 ID（必填）
-- `--data`: 要更新的字段，JSON 对象，key 为字段 ID（必填）
+- `--data`: 完整记录数据，JSON 对象，key 为字段 ID；必须包含业务主键（必填）
 - `--version`: Schema 版本号（可选，不指定则跳过版本校验）
+
+> **重要**：当前更新接口会替换整条记录的 `data`。未提供的字段可能被清空，不能直接用稀疏 JSON 做局部更新。应先查询原记录（带 `--omit-null=false`），保留完整 `data` 和 `updated`，修改目标字段后再提交。
 
 **示例**:
 ```bash
-# 更新单条记录的某个字段
-lingtong-cli table data update --basic-data-id 123 --schema-id 1 --id 33832272 --data '{"1":"新值"}'
+# 读取完整记录后再更新，data 中包含主键和其余原字段
+lingtong-cli table data update --basic-data-id 123 --schema-id 1 --id 33832272 \
+  --data '{"1":"PK-001","2":"新值","3":10}'
 
 # 带版本号更新
 lingtong-cli table data update --basic-data-id 123 --schema-id 1 --id 33832272 --data '{"1":"新值"}' --version 5
 ```
 
+### 批量创建或按主键更新记录
+
+灰度版 `gray/1.1.50` 新增 `/basicdata/record/batchSave`；CLI 用一次请求提交 JSON 数组：
+
+```bash
+lingtong-cli table data batch-create --basic-data-id <id> --schema-id <id> \
+  (--records '<json-array>' | --records-file <json-file>) [--version <n>]
+```
+
+- 每条记录需提供非空 `data` 对象，字段 ID 为数字字符串；`basicDataId`、`schemaId` 自动填充。
+- 可省略 `version`；指定 `--version` 时仅为未设置版本的记录填充。响应原样返回服务端的记录列表。
+- Excel 数据需先转换为 JSON 数组文件（示例结构：`[{"data":{"1":"产品A","2":10}},{"data":{"1":"产品B","2":20}}]`），`--records-file` 读取该文件；本命令不直接读取 `.xlsx`。
+- **主键匹配已有记录会执行全字段更新**，未提供的字段可能被清空；同一批次重复主键会失败。提交前检查主键是否重复，并先用少量数据验证字段映射。单次命令提交一批，无自动拆批。
+- CLI 不提供自动拆批、重试、进度条或断点。大数据量导入应由调用脚本单线程顺序提交：先小批量试写，再根据服务端限制调整批次；仅在批次成功后保存断点。
+- 使用确定性业务主键保证重跑幂等。Schema 查询、记录查询和批量写入必须使用相同的 `--auth`、`--profile` 或 `LINGTONG_TOKEN`，避免旧 legacy Token 写入错误组织。
+- 遇到 HTTP 500、信号量耗尽或数据库连接池超时时应退避重试，不要通过增加并发规避。服务端返回 `success:false` 时 CLI 会以错误退出。
+
+**大批量导入执行契约**：
+
+1. 只选择一种认证身份：固定 `--auth`、固定 `--profile` 中的身份，或 `LINGTONG_TOKEN`。不要同时依赖多个可能冲突的 Token 来源；写入前用同一身份查询并核对目标 Schema、主键和组织。
+2. 先用约 100 条做 canary；成功后可尝试 500～1000 条。没有通用最大批次，受宽表字段数和请求体大小影响；失败时减半，不要增加并发。
+3. 每批使用不可变 JSON 文件和确定性主键。瞬时错误最多重试 5～8 次，指数退避并封顶约 15 秒；参数、Schema、主键重复等永久错误立即停止。
+4. 超时后批次状态视为“不确定”，使用相同完整数据和确定性主键重放；不要生成新主键。
+5. 仅在 CLI 成功退出且响应 `success:true` 后原子写入断点。CLI 会在服务端返回记录数组时核对数量；若服务端不返回数组，调用脚本仍需在批后或最终对账。断点至少保存 Host/认证标签、表格 ID、Schema ID/版本、输入文件哈希、最后成功来源位置和累计成功数。
+6. 进度至少显示 `已确认来源行/总行数`、累计/近期行速、ETA、重试次数和最后成功断点；不要把扫描速度误称为数据库写入速度。
+7. 任务重启前重新核对 Host、身份、Schema 和输入哈希；同一断点文件只能有一个写入进程。
+8. 不假设批次具有事务原子性。任务结束后核对总数，并按主键抽样或分段查询；失败或超时批次先查询目标主键，再决定重放。
+
+```bash
+lingtong-cli table data batch-create --basic-data-id 1633 --schema-id 2546 \
+  --records '[{"data":{"1":"产品A","2":10}},{"data":{"1":"产品B","2":20}}]'
+
+lingtong-cli table data batch-create --basic-data-id 1633 --schema-id 2546 \
+  --version 5 --records-file ./records.json
+```
+
 ### 批量更新记录
 
 ```bash
-lingtong-cli table data batch-update --basic-data-id <id> --schema-id <id> --records <json> [--version <n>]
+lingtong-cli table data batch-update --basic-data-id <id> --schema-id <id> \
+  (--records <json> | --records-file <json-file>) [--version <n>]
 ```
 
 **参数说明**:
 - `--basic-data-id`: 表格 ID（必填）
 - `--schema-id`: Schema ID（必填）
-- `--records`: 更新记录 JSON 数组（必填），每条记录包含：
+- `--records` / `--records-file`: 二选一，提供更新记录 JSON 数组。每条记录包含：
   - `id`: 记录 ID（必填，从 `table data query` 响应获取）
-  - `data`: 字段数据，JSON Map，key 为字段 ID（必填）
+  - `data`: 完整字段数据，JSON Map，必须包含业务主键（必填）
+  - `updated`: 查询结果中的更新时间，建议保留以进行并发修改校验
 - `--version`: Schema 版本号（可选，自动填充到每条记录）
+
+> **重要**：`batch-update` 同样是全字段替换。更新前使用 `table data query --omit-null=false` 读取完整记录，在原 `data` 上修改字段；省略字段可能导致数据丢失。
+> `batch-update` 不自动拆批。大量宽表记录应拆成多个 JSON 文件，先小批试写，每批成功后再推进断点。超时批次使用相同 `id`、`updated` 和完整 `data` 重新核对或重放。
 
 **示例**:
 ```bash
 # 批量更新两条记录
 lingtong-cli table data batch-update --basic-data-id 1633 --schema-id 2546 \
-  --records '[{"id":33832272,"data":{"1":"新值1","2":10}},{"id":33832273,"data":{"1":"新值2","2":20}}]'
+  --records '[{"id":33832272,"updated":1773108469514,"data":{"1":"PK-1","2":"新值1","3":10}},{"id":33832273,"updated":1773108469514,"data":{"1":"PK-2","2":"新值2","3":20}}]'
 
 # 带版本号批量更新
 lingtong-cli table data batch-update --basic-data-id 1633 --schema-id 2546 --version 1 \
-  --records '[{"id":33832272,"data":{"1":"更新"}}]'
+  --records-file ./updates.json
 ```
 
 **注意事项**:
-- 每条记录必须包含 `id` 和 `data`
+- 每条记录必须包含 `id` 和完整 `data`，其中包含业务主键字段
 - `basicDataId` 和 `schemaId` 会自动从命令行参数填充
 - 日期字段使用毫秒时间戳存储
+- 宽表或大量记录优先使用 `--records-file`，避免命令行参数长度限制
 
 ### 统计记录数
 
@@ -760,11 +806,15 @@ lingtong-cli table create --app-id 165 --name "订单表" --source 1 --type 1 --
 1. **先查 Schema 再查数据**：使用 `table schema query` 了解字段结构，再查询数据
 2. **使用 `--basic-data-id` 而非 `--table-id`**：参数名已更新
 3. **创建记录时必须指定 `--schema-id`**：从 `table data query` 响应中获取
-4. **版本校验**：不指定 `--version` 时跳过校验（推荐），指定时需与 Schema 的 version 匹配
+4. **版本校验**：创建记录可按需省略；生产更新建议传入当前 Schema version，Schema 变化时立即失败而不是误写
 5. **字段 ID 是数字字符串**：`--data` 中的 key 使用字符串格式的数字（如 `"0"`, `"1"`）
 6. **创建时字段默认可见**：`table create` 自动设置 `show: true`；`table schema update` 新增列时需显式提供
 7. **公式字段需高性能模式**：使用 `type: "function"` 时必须 `--open-high-mode 1`
 8. **系统字段只读**：`createDate`/`updateDate` 设置 `dataDisabled: true`
+9. **更新是全字段替换**：单条和批量更新前先用 `--omit-null=false` 查询完整记录，在原 `data` 上修改；保留业务主键和 `updated`
+10. **大批导入单线程执行**：使用 `batch-create --records-file` 顺序提交，先试写再调批次；记录进度、速度和成功批次断点，不并发压测表格数据库
+11. **认证必须一致**：选择一个身份来源并贯穿 Schema、查询、写入；写前核对已知 Schema/主键，避免环境 Token、`--auth` 与 legacy Token 冲突
+12. **分页必须稳定推进**：CLI 查询优先使用 `--order-by id --order-asc` 与递增 `--page`，检测页码和记录 ID 重复；自定义脚本直调 `listNew` 时请求字段是 `pageNum`。页码分页期间不得删除/插入影响排序范围的记录；可变数据集应先冻结范围、记录最大 ID/截止更新时间，或先快照目标 ID，再处理该固定集合
 
 ## 相关技能
 

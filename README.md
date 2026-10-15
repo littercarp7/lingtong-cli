@@ -17,7 +17,7 @@
 | 连接器工厂 | 自定义连接器定义、HTTP 接口、脚本的查询、保存、运行、删除 |
 | 场景 | 场景列表、详情、草稿创建、更新、复制、开关、发布、版本、触发条件、字段映射调试 |
 | 工作流 | 创建、更新、删除、验证、测试、发布、回滚、执行、日志、Open API、模板、文档、依赖分析 |
-| 表格 | 表格 CRUD、Schema 与公式字段管理、数据查询/创建/更新/批量更新/统计/删除、视图、分组、统计指标 |
+| 表格 | 表格 CRUD、Schema 与公式字段管理、数据查询/创建/批量创建/更新/批量更新/统计/删除、视图、分组、统计指标 |
 | 透视表 | 透视表视图、配置读取/保存、维度/度量聚合查询 |
 | 模型元数据 | 接口模型、领域模型、动态模型视图 |
 | API 自省 | OpenAPI Schema 浏览、模块搜索、自动生成 `service` 命令、原始 `api` 调用 |
@@ -306,8 +306,9 @@ Token 读取顺序以代码为准：`LINGTONG_TOKEN` 可覆盖运行时 Token，
 | `table schema update` | 更新 Schema | `lingtong-cli table schema update --schema-id 2189 --basic-data-id 1553 --columns-schema '[{"id":1,"title":"Name","type":"text","key":"name","show":true}]'` |
 | `table data query` | 查询数据 | `lingtong-cli table data query --basic-data-id 123 --filter '{"1":"系统订单"}'` |
 | `table data create` | 创建记录 | `lingtong-cli table data create --basic-data-id 123 --schema-id 1 --data '{"0":"val"}'` |
-| `table data update` | 更新单条记录 | `lingtong-cli table data update --basic-data-id 123 --schema-id 1 --id 33832272 --data '{"1":"new"}'` |
-| `table data batch-update` | 批量更新 | `lingtong-cli table data batch-update --basic-data-id 123 --schema-id 1 --records '[{"id":1,"data":{"1":"v"}}]'` |
+| `table data batch-create` | 批量创建/按主键覆盖 | `lingtong-cli table data batch-create --basic-data-id 123 --schema-id 1 --records-file ./records.json` |
+| `table data update` | 全字段更新单条记录 | `lingtong-cli table data update --basic-data-id 123 --schema-id 1 --id 33832272 --data '{"1":"PK","2":"new"}'` |
+| `table data batch-update` | 全字段批量更新 | `lingtong-cli table data batch-update --basic-data-id 123 --schema-id 1 --records-file ./updates.json` |
 | `table data count` | 统计记录数 | `lingtong-cli table data count --schema-id 2546 --version 1` |
 | `table data delete` | 删除单条记录 | `lingtong-cli table data delete --schema-id 2546 --id 33832272 --yes` |
 | `table data batch-delete` | 批量删除 | `lingtong-cli table data batch-delete --schema-id 2546 --ids 1,2,3 --yes` |

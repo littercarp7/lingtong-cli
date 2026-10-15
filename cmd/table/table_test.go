@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -909,6 +911,69 @@ func TestNewCmdTableDataBatchUpdate_WithVersion(t *testing.T) {
 	err := cmd.Execute()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewCmdTableDataBatchUpdate_RecordsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "records.json")
+	if err := os.WriteFile(path, []byte(`[{"id":100,"data":{"1":"PK-100","2":"done"}}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var proxyReq struct {
+			Body []map[string]interface{} `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&proxyReq); err != nil {
+			t.Fatal(err)
+		}
+		if len(proxyReq.Body) != 1 || proxyReq.Body[0]["id"] != float64(100) {
+			t.Fatalf("records file was not preserved: %v", proxyReq.Body)
+		}
+		writeProxyResponse(t, w, map[string]interface{}{"success": true, "result": proxyReq.Body})
+	}))
+	defer server.Close()
+
+	f, _, errOut := newTestFactory(server.URL)
+	cmd := NewCmdTable(f)
+	cmd.SetErr(errOut)
+	cmd.SetArgs([]string{"data", "batch-update", "--basic-data-id", "1633", "--schema-id", "2546", "--records-file", path})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewCmdTableDataBatchUpdate_BackendFailureReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeProxyResponse(t, w, map[string]interface{}{"success": false, "msg": "database busy"})
+	}))
+	defer server.Close()
+
+	f, _, errOut := newTestFactory(server.URL)
+	cmd := NewCmdTable(f)
+	cmd.SetErr(errOut)
+	cmd.SetArgs([]string{"data", "batch-update", "--basic-data-id", "1633", "--schema-id", "2546", "--records", `[{"id":100,"data":{"1":"PK-100"}}]`})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "database busy") {
+		t.Fatalf("expected backend failure, got %v", err)
+	}
+}
+
+func TestNewCmdTableDataBatchUpdate_ResultCountMismatchReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeProxyResponse(t, w, map[string]interface{}{
+			"success": true,
+			"result":  []interface{}{map[string]interface{}{"id": 100}},
+		})
+	}))
+	defer server.Close()
+
+	f, _, errOut := newTestFactory(server.URL)
+	cmd := NewCmdTable(f)
+	cmd.SetErr(errOut)
+	cmd.SetArgs([]string{"data", "batch-update", "--basic-data-id", "1633", "--schema-id", "2546", "--records", `[{"id":100,"data":{"1":"PK-100"}},{"id":101,"data":{"1":"PK-101"}}]`})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "returned 1 records, expected 2") {
+		t.Fatalf("expected result count mismatch, got %v", err)
 	}
 }
 

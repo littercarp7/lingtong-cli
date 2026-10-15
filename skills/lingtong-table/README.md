@@ -5,7 +5,7 @@
 ## 何时使用
 
 - 创建、查询或更新表格
-- 查询、创建、更新、批量更新、统计、删除表格记录
+- 查询、创建、批量创建、更新、批量更新、统计、删除表格记录
 - 查询或更新表格 Schema
 - 添加金额、日期差、条件判断等公式/计算列
 - 管理表格视图、分组和统计指标
@@ -24,6 +24,9 @@ lingtong-cli table data query --basic-data-id 1568 --page 1 --page-size 20
 
 # 创建记录
 lingtong-cli table data create --basic-data-id 1568 --schema-id 2367 --data '{"1":"系统订单"}'
+
+# 批量创建（先把 Excel 行映射成 JSON 数组）
+lingtong-cli table data batch-create --basic-data-id 1568 --schema-id 2367 --records-file ./records.json
 ```
 
 ## 表格管理
@@ -47,6 +50,7 @@ lingtong-cli table data create --basic-data-id 1568 --schema-id 2367 --data '{"1
 | 字段精确过滤 | `lingtong-cli table data query --basic-data-id <id> --filter '{"1":"系统订单"}'` |
 | 全文搜索 | `lingtong-cli table data query --basic-data-id <id> --text 系统订单` |
 | 创建记录 | `lingtong-cli table data create --basic-data-id <id> --schema-id <id> --data '<json>'` |
+| 批量创建/按主键覆盖 | `lingtong-cli table data batch-create --basic-data-id <id> --schema-id <id> --records '<json-array>'` 或 `--records-file <json-file>` |
 | 更新记录 | `lingtong-cli table data update --basic-data-id <id> --schema-id <id> --id <record-id> --data '<json>'` |
 | 批量更新 | `lingtong-cli table data batch-update --basic-data-id <id> --schema-id <id> --records '<json-array>'` |
 | 统计数量 | `lingtong-cli table data count --schema-id <id> --version <n>` |
@@ -54,6 +58,13 @@ lingtong-cli table data create --basic-data-id 1568 --schema-id 2367 --data '{"1
 | 批量删除 | `lingtong-cli table data batch-delete --schema-id <id> --ids 1,2,3 --yes` |
 
 记录数据的 key 通常是字段 ID 字符串，例如 `{"1":"值"}`。先用 `table schema query` 确认字段 ID 和字段类型。
+批量创建调用 `batchSave`，同批次主键重复会失败；与已有主键相同的数据会全字段更新，未提供的字段可能被清空。Excel 文件需先转换为 `[{"data":{"1":"值"}}]` 格式的 JSON 文件。
+
+更新和批量更新同样会替换完整 `data`，不是安全的局部字段更新。先用 `table data query --omit-null=false` 读取完整记录，保留业务主键与 `updated`，在原 `data` 上修改后再提交。宽表或大量更新使用 `batch-update --records-file`。
+
+大数据量导入使用单线程顺序批次：约 100 条 canary 成功后再尝试 500～1000 条；失败时减半，不增加并发。使用确定性主键和不可变批次文件，瞬时故障重试 5～8 次；仅在 `success:true` 后原子保存 Host、认证标签、表/Schema、输入哈希和最后成功位置。CLI 不自动拆批，也不提供进度或断点，调用脚本需自行实现。
+
+认证只选一个来源并贯穿 Schema、查询和写入。全字段读改写使用稳定分页（优先按 `id` 升序），检测重复页/记录；直接调用 `listNew` 时分页字段为 `pageNum`。可变数据集先固定最大 ID、截止更新时间或目标 ID 快照，避免页码分页期间插入/删除导致漏数。批量任务完成后必须按总数和主键抽样对账，不假设批次天然具有事务原子性。
 
 ## 视图与分组
 
@@ -90,6 +101,7 @@ lingtong-cli table pivot query --table-id 1568 --view-id 621
 
 - 删除和批量删除必须显式传 `--yes`。
 - 大批量更新前先用小范围记录测试。
+- 不要用并发写入规避超时或连接池耗尽；应降低批次并退避重试。
 - 高性能模式、连接器同步开关会影响表格行为，修改前确认环境和业务影响。
 
 ## 相关文档
