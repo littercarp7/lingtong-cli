@@ -21,7 +21,7 @@
 | 透视表 | 透视表视图、配置读取/保存、维度/度量聚合查询 |
 | 模型元数据 | 接口模型、领域模型、动态模型视图 |
 | API 自省 | OpenAPI Schema 浏览、模块搜索、自动生成 `service` 命令、原始 `api` 调用 |
-| Agent Skills | 12 个内置 Skills，可安装到 Claude Code、OpenCode、Qoder、Cursor、Trae、Codex |
+| Agent Skills | 13 个内置 Skills，可安装到 Claude Code、OpenCode、Qoder、Cursor、Trae、Codex |
 
 ## 为什么选 lingtong-cli？
 
@@ -364,7 +364,7 @@ Token 读取顺序以代码为准：`LINGTONG_TOKEN` 可覆盖运行时 Token，
 
 ## Agent Skills
 
-本版本构建后内置 12 个有效 Skills。可通过 `lingtong-cli skills list` 查看当前二进制的实时清单。
+本版本构建后内置 13 个有效 Skills。可通过 `lingtong-cli skills list` 查看当前二进制的实时清单。
 
 | Skill | 说明 |
 |-------|------|
@@ -375,6 +375,7 @@ Token 读取顺序以代码为准：`LINGTONG_TOKEN` 可覆盖运行时 Token，
 | `lingtong-scene` | 场景查询、草稿创建、生命周期操作、触发条件、字段映射调试 |
 | `lingtong-workflow` | 工作流 DSL、节点编排、验证、测试、发布、执行、Open API |
 | `lingtong-table` | 表格 CRUD、Schema、公式入口、记录 CRUD、视图、分组、统计 |
+| `lingtong-kmmdtable` | 快麦多维表格模块入口：资源与文件夹、仪表盘、自定义页面及权限；复用表格和透视表 Skill |
 | `lingtong-table-formula` | 公式字段、函数参考、完整 Schema 更新、ES Runtime Field/Painless 排查 |
 | `lingtong-pivot-table` | 透视表查询、配置、维度/度量聚合 |
 | `lingtong-model` | 接口模型、领域模型、动态模型视图 |

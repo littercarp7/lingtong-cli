@@ -816,7 +816,12 @@ lingtong-cli table create --app-id 165 --name "订单表" --source 1 --type 1 --
 11. **认证必须一致**：选择一个身份来源并贯穿 Schema、查询、写入；写前核对已知 Schema/主键，避免环境 Token、`--auth` 与 legacy Token 冲突
 12. **分页必须稳定推进**：CLI 查询优先使用 `--order-by id --order-asc` 与递增 `--page`，检测页码和记录 ID 重复；自定义脚本直调 `listNew` 时请求字段是 `pageNum`。页码分页期间不得删除/插入影响排序范围的记录；可变数据集应先冻结范围、记录最大 ID/截止更新时间，或先快照目标 ID，再处理该固定集合
 
+## 扩展操作
+
+筛选配置、Excel 导入导出、字典与连接器同步见 [表格扩展操作](references/advanced.md)。
+
 ## 相关技能
 
 - [lingtong-table-formula](../lingtong-table-formula/SKILL.md) - 公式字段、常用函数、ES Runtime Field/Painless
 - [lingtong-pivot-table](../lingtong-pivot-table/SKILL.md) - 绫通表格数据透视表
+- [lingtong-kmmdtable](../lingtong-kmmdtable/SKILL.md) - 快麦多维表格资源、文件夹、仪表盘、自定义页面与权限
