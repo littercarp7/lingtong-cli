@@ -11,6 +11,24 @@
 
 用户要求先预览时，先提供预览，按其确认顺序回传；已明确要求回传时直接完成授权范围内的操作。
 
+## 页面运行时请求约定
+
+- 使用当前部署环境的平台 Web 业务接口，例如 `/admin/ltapp/...`；不使用 `/gw` 网关，也不把 `/gw` 作为失败重试或备用前缀。
+- 登录态由浏览器携带当前 Cookie。页面不从 Cookie、`localStorage` 或 `sessionStorage` 中读取、缓存 Token，不手动拼接 `Authorization: Bearer ...` 或设置 `Cookie` 请求头，也不将 CLI Token 写入 HTML。
+- 使用 Fetch 时设置 `credentials: 'include'`；使用 Axios 时设置 `withCredentials: true`。
+
+下面的 `businessUrl` 是按当前部署环境确认的 Web 业务接口地址：
+
+```js
+const response = await fetch(businessUrl, {
+  method: 'GET',
+  headers: { Accept: 'application/json' },
+  credentials: 'include'
+});
+```
+
+以上约定仅用于生成页面中的浏览器请求；Agent 开发取数和保存草稿仍通过 CLI，并沿用 CLI 自身的授权流程。
+
 ## 新建页面
 
 1. 从用户上下文或绑定应用查询取得目标 `appId`，开发并验证 HTML。
